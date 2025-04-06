@@ -2,7 +2,7 @@
 // 以下是一些基本扩展功能的示例
 
 // 你可能需要从 extensions.js 导入 extension_settings, getContext 和 loadExtensionSettings
-import { extension_settings, getContext, loadExtensionSettings } from "../../../extensions.js";
+import { extension_settings } from "../../../extensions.js";
 
 // 你可能需要从主脚本导入一些其他函数
 import { saveSettingsDebounced, eventSource, event_types } from "../../../../script.js";
@@ -10,16 +10,10 @@ import { saveSettingsDebounced, eventSource, event_types } from "../../../../scr
 // 跟踪扩展的位置，名称应与仓库名称匹配
 const extensionName = "silly-tavern-reminder";
 const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
-const extensionSettings = extension_settings[extensionName];
 const defaultSettings = {
     enableReminder: true, // 添加提醒功能的默认值
     enableNotification: true, // 添加通知功能的默认值
 };
-
-// 添加闪烁相关变量
-let titleFlashTimer = null;
-let originalTitle = document.title;
-let isFlashing = false;
 
 // 通知管理器
 const NotificationManager = {

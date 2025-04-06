@@ -13,6 +13,24 @@ const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const defaultSettings = {
     enableReminder: true, // 添加提醒功能的默认值
     enableNotification: true, // 添加通知功能的默认值
+    enableErrorSound: true, // 添加错误提示音功能的默认值
+};
+
+// 音频管理器
+const AudioManager = {
+    errorSound: null,
+
+    init() {
+        this.errorSound = new Audio('/sounds/message.mp3');
+        this.errorSound.volume = 0.5;
+    },
+
+    playError() {
+        if (extension_settings[extensionName].enableErrorSound && this.errorSound) {
+            this.errorSound.currentTime = 0;
+            this.errorSound.play().catch(err => console.error('播放错误提示音失败:', err));
+        }
+    }
 };
 
 // 通知管理器
@@ -45,13 +63,25 @@ const NotificationManager = {
     },
 
     // 发送通知
-    send() {
+    send(title = "SillyTavern 新消息", body = "您有新的消息", options = {}) {
         if (this.checkPermission() === "granted" && extension_settings[extensionName].enableNotification) {
-            new Notification("SillyTavern 新消息", {
-                body: "您有新的消息",
-                icon: "/favicon.ico"
+            new Notification(title, {
+                body: body,
+                icon: "/favicon.ico",
+                ...options
             });
         }
+    },
+
+    // 发送错误通知
+    sendError(error) {
+        const errorMessage = error?.message || '未知错误';
+        this.send(
+            "SillyTavern 发生错误",
+            `错误信息: ${errorMessage}`,
+            { tag: 'error-notification' }
+        );
+        AudioManager.playError();
     }
 };
 
@@ -114,6 +144,7 @@ const SettingsManager = {
     updateUI() {
         $("#title_reminder_setting").prop("checked", extension_settings[extensionName].enableReminder);
         $("#notification_setting").prop("checked", extension_settings[extensionName].enableNotification);
+        $("#error_sound_setting").prop("checked", extension_settings[extensionName].enableErrorSound);
     },
 
     // 保存设置
@@ -200,10 +231,28 @@ const MessageHandler = {
 // 监听消息生成完毕事件
 eventSource.on(event_types.MESSAGE_RECEIVED, MessageHandler.handleIncomingMessage.bind(MessageHandler));
 
+// 错误处理器
+const ErrorHandler = {
+    init() {
+        // 捕获未处理的Promise错误
+        window.addEventListener('unhandledrejection', (event) => {
+            NotificationManager.sendError(event.reason);
+        });
+
+        // 捕获全局运行时错误
+        window.addEventListener('error', (event) => {
+            NotificationManager.sendError(event.error);
+        });
+    }
+};
+
 // 初始化管理器
 const InitManager = {
     async init() {
         try {
+            // 初始化错误处理器和音频管理器
+            ErrorHandler.init();
+            AudioManager.init();
             // 加载HTML和CSS
             const settingsHtml = await $.get(`${extensionFolderPath}/reminder.html`);
             $("#extensions_settings2").append(settingsHtml);
@@ -216,6 +265,10 @@ const InitManager = {
             // 绑定事件监听
             $("#title_reminder_setting").on("input", EventHandler.onReminderToggle);
             $("#notification_setting").on("input", EventHandler.onNotificationToggle);
+            $("#error_sound_setting").on("input", (event) => {
+                const value = Boolean($(event.target).prop("checked"));
+                SettingsManager.save('enableErrorSound', value);
+            });
             $("#request_notification_permission").on("click", EventHandler.onRequestPermissionClick);
 
             // 加载设置

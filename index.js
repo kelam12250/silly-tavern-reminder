@@ -63,13 +63,17 @@ const NotificationManager = {
     },
 
     // 发送通知
-    send(title = "SillyTavern 新消息", body = "您有新的消息", options = {}) {
-        if (this.checkPermission() === "granted" && extension_settings[extensionName].enableNotification) {
-            new Notification(title, {
-                body: body,
-                icon: "/favicon.ico",
-                ...options
-            });
+    async send(title = "SillyTavern 新消息", body = "您有新的消息", options = {}) {
+        try {
+            if (this.checkPermission() === "granted" && extension_settings[extensionName].enableNotification) {
+                return new Notification(title, {
+                    body: body,
+                    icon: "/favicon.ico",
+                    ...options
+                });
+            }
+        } catch (error) {
+            console.error('发送通知时出错:', error);
         }
     },
 
@@ -78,8 +82,7 @@ const NotificationManager = {
         const errorMessage = error?.message || '未知错误';
         this.send(
             "SillyTavern 发生错误",
-            `错误信息: ${errorMessage}`,
-            { tag: 'error-notification' }
+            `错误信息: ${errorMessage}`
         );
         AudioManager.playError();
     }
@@ -216,14 +219,14 @@ const MessageHandler = {
         return document.hidden || (!document.hidden && !document.hasFocus());
     },
 
-    handleIncomingMessage(data) {
+    async handleIncomingMessage(data) {
         const needReminder = this.shouldSendReminder();
         
         if (needReminder) {
             if (extension_settings[extensionName].enableReminder) {
                 TitleFlashManager.start();
             }
-            NotificationManager.send();
+            await NotificationManager.send();
         }
     }
 };

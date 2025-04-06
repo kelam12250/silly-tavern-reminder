@@ -16,6 +16,11 @@ A SillyTavern extension that provides message reminder functionality.
   
   - When switched to other tabs, new messages will be reminded by system notification
 
+- ⚠️ 错误通知功能 | Error Notification
+  - 当系统发生错误时，会通过系统通知和提示音进行提醒
+  
+  - When system errors occur, you will be notified through system notifications and sound alerts
+
 ## 安装方法 | Installation
 
 1. 打开 SillyTavern 扩展管理页面

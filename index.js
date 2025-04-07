@@ -239,12 +239,18 @@ const ErrorHandler = {
     init() {
         // 捕获未处理的Promise错误
         window.addEventListener('unhandledrejection', (event) => {
-            NotificationManager.sendError(event.reason);
+            const errorMessage = String(event.reason);
+            if (errorMessage.includes('Uncaught (in promise) Error:')) {
+                NotificationManager.sendError(event.reason);
+            }
         });
 
         // 捕获全局运行时错误
         window.addEventListener('error', (event) => {
-            NotificationManager.sendError(event.error);
+            const errorMessage = String(event.error);
+            if (errorMessage.includes('Uncaught (in promise) Error:')) {
+                NotificationManager.sendError(event.error);
+            }
         });
     }
 };

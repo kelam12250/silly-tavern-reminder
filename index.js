@@ -172,25 +172,74 @@ const NotificationManager = {
         body: body,
         icon: '/favicon.ico',
         tag: 'silly-tavern-message',
-        requireInteraction: envInfo.isMobile ? false : true, // 移动端设为false
+        requireInteraction: false, // 移动端必须设为false
         silent: false,
+        renotify: true, // 允许重复通知
         ...options,
       };
 
-      // 移动端可能需要更简单的选项
+      // 移动端特殊处理
       if (envInfo.isMobile) {
-        // 移除一些移动端可能不支持的选项
+        // 移除移动端不支持或可能导致问题的选项
         delete notificationOptions.vibrate;
         delete notificationOptions.actions;
+        delete notificationOptions.image;
+        delete notificationOptions.badge;
+
+        // 移动端使用更简单的配置
+        notificationOptions.requireInteraction = false;
+        notificationOptions.silent = false;
+
+        // Android Chrome特殊处理
+        if (envInfo.userAgent.includes('Android') && envInfo.userAgent.includes('Chrome')) {
+          // 确保tag是唯一的，避免被覆盖
+          notificationOptions.tag = `silly-tavern-${Date.now()}`;
+          // 添加时间戳确保通知能显示
+          notificationOptions.timestamp = Date.now();
+        }
       }
 
-      console.log('通知选项:', notificationOptions);
+      console.log('最终通知选项:', notificationOptions);
 
-      const notification = new Notification(title, notificationOptions);
+      // 尝试创建通知
+      let notification;
+      try {
+        notification = new Notification(title, notificationOptions);
+        console.log('通知对象创建成功:', notification);
+      } catch (createError) {
+        console.error('创建通知对象失败:', createError);
 
+        // 尝试使用最简配置重新创建
+        if (envInfo.isMobile) {
+          console.log('尝试使用最简配置重新创建通知...');
+          const simpleOptions = {
+            body: body,
+            tag: `simple-${Date.now()}`,
+          };
+
+          try {
+            notification = new Notification(title, simpleOptions);
+            console.log('使用简单配置创建通知成功');
+          } catch (simpleError) {
+            console.error('简单配置也失败:', simpleError);
+            throw simpleError;
+          }
+        } else {
+          throw createError;
+        }
+      }
+
+      // 设置事件监听器
       notification.onclick = function () {
         console.log('通知被点击');
-        window.focus();
+        try {
+          window.focus();
+          if (parent && parent !== window) {
+            parent.focus();
+          }
+        } catch (focusError) {
+          console.warn('聚焦窗口失败:', focusError);
+        }
         this.close();
       };
 
@@ -206,24 +255,48 @@ const NotificationManager = {
         console.log('通知已关闭');
       };
 
-      // 移动端自动关闭时间更短
+      // 移动端自动关闭（避免通知堆积）
       if (envInfo.isMobile) {
         setTimeout(() => {
-          notification.close();
-        }, 5000);
+          try {
+            if (notification) {
+              notification.close();
+              console.log('移动端通知自动关闭');
+            }
+          } catch (closeError) {
+            console.warn('关闭通知失败:', closeError);
+          }
+        }, 8000); // 8秒后自动关闭
       }
 
       return notification;
     } catch (error) {
       console.error('发送通知时出错:', error);
+      console.error('错误详情:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
 
-      // 详细的错误信息
+      // 移动端特殊错误处理和建议
       if (this.isMobile()) {
-        console.error('移动端通知错误，可能的原因:');
-        console.error('1. 浏览器不支持Web Notification');
-        console.error('2. 需要HTTPS环境');
-        console.error('3. 浏览器设置禁用了通知');
-        console.error('4. 移动端浏览器限制');
+        console.error('移动端通知错误分析:');
+        console.error('1. 错误类型:', error.name);
+        console.error('2. 错误信息:', error.message);
+
+        // 根据错误类型提供具体建议
+        if (error.name === 'TypeError') {
+          console.error('建议: 可能是通知选项不兼容，尝试使用更简单的配置');
+        } else if (error.name === 'NotAllowedError') {
+          console.error('建议: 权限问题，检查浏览器和系统通知设置');
+        } else if (error.name === 'AbortError') {
+          console.error('建议: 通知被中止，可能是系统限制');
+        }
+
+        // 提供用户友好的错误提示
+        if (window.toastr) {
+          toastr.error(`移动端通知发送失败: ${error.message}`);
+        }
       }
 
       return null;
@@ -474,6 +547,283 @@ const ErrorHandler = {
   },
 };
 
+// 移动端通知检查工具
+const MobileNotificationChecker = {
+  // 全面检查移动端通知环境
+  async checkMobileNotificationEnvironment() {
+    const results = {
+      basicSupport: false,
+      permission: 'unknown',
+      httpsCheck: false,
+      userAgentInfo: '',
+      systemChecks: [],
+      recommendations: [],
+    };
+
+    console.log('=== 移动端通知环境检查 ===');
+
+    // 1. 基础支持检查
+    results.basicSupport = 'Notification' in window;
+    console.log('1. 基础API支持:', results.basicSupport ? '✅' : '❌');
+
+    // 2. 权限检查
+    if (results.basicSupport) {
+      results.permission = Notification.permission;
+      console.log('2. 权限状态:', results.permission);
+    }
+
+    // 3. HTTPS检查
+    results.httpsCheck = location.protocol === 'https:' || location.hostname === 'localhost';
+    console.log('3. HTTPS环境:', results.httpsCheck ? '✅' : '❌');
+
+    // 4. 用户代理检查
+    results.userAgentInfo = navigator.userAgent;
+    console.log('4. 用户代理:', results.userAgentInfo);
+
+    // 5. 移动端特殊检查
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    if (isMobile) {
+      console.log('5. 移动设备检测: ✅');
+
+      // Android检查
+      if (results.userAgentInfo.includes('Android')) {
+        const androidVersion = results.userAgentInfo.match(/Android (\d+)/);
+        if (androidVersion) {
+          const version = parseInt(androidVersion[1]);
+          results.systemChecks.push({
+            name: 'Android版本',
+            status: version >= 7 ? '✅' : '⚠️',
+            detail: `Android ${version} ${version >= 7 ? '(支持)' : '(可能不支持)'}`,
+          });
+        }
+
+        if (results.userAgentInfo.includes('Chrome')) {
+          const chromeVersion = results.userAgentInfo.match(/Chrome\/(\d+)/);
+          if (chromeVersion) {
+            const version = parseInt(chromeVersion[1]);
+            results.systemChecks.push({
+              name: 'Chrome版本',
+              status: version >= 59 ? '✅' : '⚠️',
+              detail: `Chrome ${version} ${version >= 59 ? '(支持)' : '(版本过低)'}`,
+            });
+          }
+        }
+      }
+
+      // iOS检查
+      if (results.userAgentInfo.includes('iPhone') || results.userAgentInfo.includes('iPad')) {
+        const iosVersion = results.userAgentInfo.match(/OS (\d+)_(\d+)/);
+        if (iosVersion) {
+          const majorVersion = parseInt(iosVersion[1]);
+          const minorVersion = parseInt(iosVersion[2]);
+          const isSupported = majorVersion > 16 || (majorVersion === 16 && minorVersion >= 4);
+
+          results.systemChecks.push({
+            name: 'iOS版本',
+            status: isSupported ? '✅' : '❌',
+            detail: `iOS ${majorVersion}.${minorVersion} ${isSupported ? '(支持)' : '(需要16.4+)'}`,
+          });
+        }
+      }
+    }
+
+    // 6. 生成建议
+    if (!results.basicSupport) {
+      results.recommendations.push('浏览器不支持Web Notification API，请更换现代浏览器');
+    }
+
+    if (!results.httpsCheck) {
+      results.recommendations.push('需要HTTPS环境，请使用HTTPS访问网站');
+    }
+
+    if (results.permission === 'denied') {
+      results.recommendations.push('通知权限被拒绝，请在浏览器设置中手动开启');
+    }
+
+    if (results.permission === 'default') {
+      results.recommendations.push('尚未申请通知权限，请点击"申请通知权限"按钮');
+    }
+
+    // 移动端特殊建议
+    if (isMobile) {
+      results.recommendations.push('移动端建议：检查系统设置→通知→浏览器应用');
+      results.recommendations.push('移动端建议：确保浏览器有后台运行权限');
+      results.recommendations.push('移动端建议：关闭电池优化中的浏览器限制');
+    }
+
+    return results;
+  },
+
+  // 显示检查结果
+  displayCheckResults(results) {
+    console.log('=== 检查结果汇总 ===');
+    console.log('基础支持:', results.basicSupport ? '✅' : '❌');
+    console.log('HTTPS环境:', results.httpsCheck ? '✅' : '❌');
+    console.log('权限状态:', results.permission);
+
+    if (results.systemChecks.length > 0) {
+      console.log('系统检查:');
+      results.systemChecks.forEach(check => {
+        console.log(`- ${check.name}: ${check.status} ${check.detail}`);
+      });
+    }
+
+    if (results.recommendations.length > 0) {
+      console.log('建议:');
+      results.recommendations.forEach((rec, index) => {
+        console.log(`${index + 1}. ${rec}`);
+      });
+    }
+
+    // 显示给用户
+    const summary = `
+通知环境检查结果：
+• 基础支持: ${results.basicSupport ? '✅' : '❌'}
+• HTTPS环境: ${results.httpsCheck ? '✅' : '❌'}  
+• 权限状态: ${results.permission}
+${results.systemChecks.map(c => `• ${c.name}: ${c.status} ${c.detail}`).join('\n')}
+
+${
+  results.recommendations.length > 0
+    ? '建议：\n' + results.recommendations.map((r, i) => `${i + 1}. ${r}`).join('\n')
+    : ''
+}
+    `.trim();
+
+    toastr.info(summary);
+  },
+};
+
+// Chrome 136 移动端通知问题检测器
+const Chrome136NotificationFixer = {
+  // 检测是否为Chrome 136
+  isChrome136() {
+    const userAgent = navigator.userAgent;
+    const chromeMatch = userAgent.match(/Chrome\/(\d+)/);
+    return chromeMatch && parseInt(chromeMatch[1]) === 136;
+  },
+
+  // Chrome 136 特殊处理
+  async fixChrome136Notification() {
+    if (!this.isChrome136()) {
+      return false;
+    }
+
+    console.log('检测到Chrome 136，应用特殊修复...');
+
+    try {
+      // Chrome 136 可能需要特殊的通知配置
+      const notification = new Notification('Chrome 136 修复测试', {
+        body: '正在测试Chrome 136的通知修复',
+        // Chrome 136 移动端可能需要这些特殊配置
+        requireInteraction: false,
+        silent: false,
+        renotify: false,
+        // 移除可能导致问题的选项
+        // 不使用 icon, badge, image 等可能导致问题的选项
+      });
+
+      // Chrome 136 特殊事件处理
+      notification.onshow = function () {
+        console.log('Chrome 136 通知修复成功！');
+        toastr.success('Chrome 136 通知修复成功！');
+      };
+
+      notification.onerror = function (error) {
+        console.error('Chrome 136 通知修复失败:', error);
+        // 尝试更简单的配置
+        Chrome136NotificationFixer.tryMinimalNotification();
+      };
+
+      notification.onclick = function () {
+        this.close();
+      };
+
+      // Chrome 136 移动端自动关闭
+      setTimeout(() => {
+        try {
+          notification.close();
+        } catch (e) {
+          console.warn('关闭Chrome 136通知失败:', e);
+        }
+      }, 6000);
+
+      return true;
+    } catch (error) {
+      console.error('Chrome 136 修复失败:', error);
+      return this.tryMinimalNotification();
+    }
+  },
+
+  // 尝试最小化配置
+  async tryMinimalNotification() {
+    try {
+      console.log('尝试Chrome 136最小化通知配置...');
+
+      // 最简配置，只有标题和内容
+      const notification = new Notification('最简测试');
+
+      notification.onshow = function () {
+        console.log('Chrome 136最简通知成功！');
+        toastr.success('Chrome 136最简通知成功！');
+      };
+
+      notification.onerror = function (error) {
+        console.error('Chrome 136最简通知也失败:', error);
+        toastr.error('Chrome 136通知功能可能存在兼容性问题');
+      };
+
+      setTimeout(() => {
+        try {
+          notification.close();
+        } catch (e) {
+          console.warn('关闭最简通知失败:', e);
+        }
+      }, 4000);
+
+      return true;
+    } catch (error) {
+      console.error('Chrome 136最简通知失败:', error);
+
+      // 提供Chrome 136特殊建议
+      toastr.error(
+        'Chrome 136移动端通知问题\n建议：\n1. 重启Chrome浏览器\n2. 清除浏览器缓存\n3. 检查系统通知设置\n4. 尝试使用其他浏览器',
+      );
+
+      return false;
+    }
+  },
+
+  // Chrome 136 环境检查
+  checkChrome136Environment() {
+    const envInfo = NotificationManager.getEnvironmentInfo();
+
+    console.log('=== Chrome 136 环境检查 ===');
+    console.log('Chrome版本:', envInfo.userAgent.match(/Chrome\/(\d+)/)?.[1] || '未知');
+    console.log('是否为Chrome 136:', this.isChrome136());
+    console.log('移动设备:', envInfo.isMobile);
+    console.log('HTTPS环境:', envInfo.isHTTPS);
+    console.log('通知支持:', envInfo.notificationSupport);
+    console.log('权限状态:', envInfo.permission);
+
+    if (this.isChrome136() && envInfo.isMobile) {
+      console.log('Chrome 136移动端特殊提示:');
+      console.log('1. Chrome 136是2025年4月发布的新版本');
+      console.log('2. 可能存在移动端通知的兼容性问题');
+      console.log('3. 建议尝试重启浏览器或清除缓存');
+      console.log('4. 如果问题持续，可能需要等待Chrome更新修复');
+
+      // 显示给用户
+      toastr.info('检测到Chrome 136移动端\n这是一个新版本，可能存在通知兼容性问题\n建议尝试重启浏览器或清除缓存');
+    }
+
+    return {
+      isChrome136: this.isChrome136(),
+      needsSpecialHandling: this.isChrome136() && envInfo.isMobile,
+    };
+  },
+};
+
 // 初始化管理器
 const InitManager = {
   async init() {
@@ -528,6 +878,16 @@ const InitManager = {
         const warningDiv = $('#mobile_compatibility_warning div');
         warningDiv.append('<li style="color: #dc3545; font-weight: bold;">当前非HTTPS环境，通知功能将无法使用</li>');
       }
+
+      // Chrome 136 特殊检查
+      const chrome136Check = Chrome136NotificationFixer.checkChrome136Environment();
+      if (chrome136Check.isChrome136) {
+        const warningDiv = $('#mobile_compatibility_warning div ul');
+        warningDiv.append(
+          '<li style="color: #ff6b35; font-weight: bold;">检测到Chrome 136移动端，可能存在通知兼容性问题</li>',
+        );
+        warningDiv.append('<li style="color: #ff6b35;">建议：重启浏览器、清除缓存或尝试Chrome 136修复功能</li>');
+      }
     }
 
     // 开发模式下显示调试信息
@@ -549,6 +909,9 @@ const InitManager = {
     // 新增的调试功能事件监听
     $('#show_debug_info').on('click', this.showDebugInfo);
     $('#test_notification').on('click', this.testNotification);
+    $('#test_simple_notification').on('click', this.testSimpleNotification);
+    $('#check_mobile_environment').on('click', this.checkMobileEnvironment);
+    $('#test_chrome136_fix').on('click', this.testChrome136Fix);
   },
 
   showDebugInfo() {
@@ -597,17 +960,230 @@ const InitManager = {
       return;
     }
 
-    try {
-      const notification = await NotificationManager.send('测试通知', '这是一条测试通知，用于验证通知功能是否正常工作');
+    // 移动端特殊检查
+    if (envInfo.isMobile) {
+      console.log('移动端测试通知 - 环境检查:');
+      console.log('- 设备类型:', envInfo.isMobile ? '移动设备' : '桌面设备');
+      console.log('- HTTPS状态:', envInfo.isHTTPS ? '是' : '否');
+      console.log('- 通知支持:', envInfo.notificationSupport ? '是' : '否');
+      console.log('- 权限状态:', envInfo.permission);
+      console.log('- Service Worker支持:', envInfo.serviceWorkerSupport ? '是' : '否');
 
-      if (notification) {
-        toastr.success('测试通知已发送');
+      // 检查可能的移动端限制
+      if (envInfo.userAgent.includes('Android')) {
+        console.log('- Android设备检测到');
+        if (envInfo.userAgent.includes('Chrome')) {
+          console.log('- 使用Chrome浏览器，兼容性良好');
+        }
+      }
+
+      if (envInfo.userAgent.includes('iPhone') || envInfo.userAgent.includes('iPad')) {
+        console.log('- iOS设备检测到');
+        const iosVersion = envInfo.userAgent.match(/OS (\d+)_/);
+        if (iosVersion && parseInt(iosVersion[1]) < 16) {
+          console.warn('- iOS版本可能过低，建议升级到16.4+');
+          toastr.warning('iOS版本可能过低，建议升级到16.4+');
+        }
+      }
+    }
+
+    try {
+      console.log('开始发送测试通知...');
+
+      // 先尝试发送一个最简单的通知
+      const simpleNotification = await NotificationManager.send(
+        '🔔 测试通知',
+        '这是一条测试通知，用于验证通知功能是否正常工作',
+      );
+
+      if (simpleNotification) {
+        console.log('测试通知发送成功:', simpleNotification);
+        toastr.success('测试通知已发送！如果您没有看到通知，请检查系统通知设置');
+
+        // 移动端额外提示
+        if (envInfo.isMobile) {
+          setTimeout(() => {
+            toastr.info('移动端提示：如果没有看到通知，请检查：\n1. 系统设置→通知→浏览器\n2. 浏览器设置→网站设置→通知');
+          }, 2000);
+        }
       } else {
+        console.error('测试通知发送失败 - 返回null');
         toastr.error('测试通知发送失败');
+
+        // 移动端故障排除建议
+        if (envInfo.isMobile) {
+          this.showMobileTroubleshooting();
+        }
       }
     } catch (error) {
       console.error('测试通知失败:', error);
+      console.error('错误详情:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+      });
+
       toastr.error('测试通知发送失败: ' + error.message);
+
+      // 移动端详细错误分析
+      if (envInfo.isMobile) {
+        this.analyzeMobileNotificationError(error);
+      }
+    }
+  },
+
+  // 移动端故障排除指南
+  showMobileTroubleshooting() {
+    const troubleshootingSteps = [
+      '1. 检查系统设置 → 通知 → 浏览器应用',
+      '2. 检查浏览器设置 → 网站设置 → 通知',
+      '3. 确保浏览器在后台运行权限',
+      '4. 尝试重新申请通知权限',
+      '5. 重启浏览器后再次测试',
+    ];
+
+    console.log('移动端故障排除步骤:');
+    troubleshootingSteps.forEach(step => console.log(step));
+
+    toastr.warning('移动端通知故障排除：\n' + troubleshootingSteps.join('\n'));
+  },
+
+  // 移动端错误分析
+  analyzeMobileNotificationError(error) {
+    console.log('移动端通知错误分析:');
+
+    const errorAnalysis = {
+      TypeError: {
+        reason: '通知选项不兼容或API调用错误',
+        solutions: ['尝试使用更简单的通知配置', '检查浏览器版本是否过旧', '确认Notification API完全支持'],
+      },
+      NotAllowedError: {
+        reason: '权限被拒绝或系统限制',
+        solutions: ['检查系统通知设置', '检查浏览器通知权限', '重新申请通知权限'],
+      },
+      AbortError: {
+        reason: '通知被系统中止',
+        solutions: ['检查勿扰模式设置', '检查电池优化设置', '确保浏览器有后台运行权限'],
+      },
+      InvalidStateError: {
+        reason: '通知服务状态异常',
+        solutions: ['重启浏览器', '清除浏览器缓存', '检查Service Worker状态'],
+      },
+    };
+
+    const analysis = errorAnalysis[error.name] || {
+      reason: '未知错误类型',
+      solutions: ['尝试重启浏览器', '检查系统和浏览器设置', '联系技术支持'],
+    };
+
+    console.log(`错误类型: ${error.name}`);
+    console.log(`可能原因: ${analysis.reason}`);
+    console.log('解决方案:');
+    analysis.solutions.forEach((solution, index) => {
+      console.log(`${index + 1}. ${solution}`);
+    });
+
+    // 显示用户友好的错误信息
+    const userMessage = `通知错误分析：\n原因：${analysis.reason}\n解决方案：\n${analysis.solutions
+      .map((s, i) => `${i + 1}. ${s}`)
+      .join('\n')}`;
+    toastr.error(userMessage);
+  },
+
+  // 简化测试通知（专门针对移动端）
+  async testSimpleNotification() {
+    const envInfo = NotificationManager.getEnvironmentInfo();
+    console.log('简化测试通知 - 移动端专用:', envInfo);
+
+    if (!NotificationManager.checkSupport()) {
+      toastr.error('此浏览器不支持通知功能');
+      return;
+    }
+
+    const permission = NotificationManager.checkPermission();
+    if (permission !== 'granted') {
+      toastr.warning('请先申请通知权限');
+      return;
+    }
+
+    try {
+      console.log('使用最简配置创建通知...');
+
+      // 使用最简单的配置，移除所有可能导致问题的选项
+      const notification = new Notification('简化测试', {
+        body: '这是最简化的测试通知',
+      });
+
+      console.log('简化通知创建成功:', notification);
+
+      // 基本事件监听
+      notification.onshow = function () {
+        console.log('简化通知显示成功');
+        toastr.success('简化通知显示成功！');
+      };
+
+      notification.onerror = function (error) {
+        console.error('简化通知显示失败:', error);
+        toastr.error('简化通知显示失败');
+      };
+
+      notification.onclick = function () {
+        console.log('简化通知被点击');
+        this.close();
+      };
+
+      // 移动端自动关闭
+      if (envInfo.isMobile) {
+        setTimeout(() => {
+          try {
+            notification.close();
+            console.log('简化通知自动关闭');
+          } catch (e) {
+            console.warn('关闭简化通知失败:', e);
+          }
+        }, 5000);
+      }
+
+      toastr.info('简化测试通知已发送，使用最基本配置');
+    } catch (error) {
+      console.error('简化测试通知失败:', error);
+      console.error('即使是最简配置也失败，可能的原因:');
+      console.error('1. 系统级别的通知被禁用');
+      console.error('2. 浏览器的通知功能被限制');
+      console.error('3. 移动端浏览器的特殊限制');
+
+      toastr.error(`简化测试也失败: ${error.message}\n这可能是系统或浏览器级别的限制`);
+
+      // 提供最终的故障排除建议
+      setTimeout(() => {
+        toastr.warning(
+          '最终建议：\n1. 检查手机系统设置→通知→Chrome\n2. 检查Chrome设置→网站设置→通知\n3. 重启Chrome浏览器\n4. 尝试其他支持的浏览器',
+        );
+      }, 2000);
+    }
+  },
+
+  // 移动端环境检查
+  async checkMobileEnvironment() {
+    const results = await MobileNotificationChecker.checkMobileNotificationEnvironment();
+    MobileNotificationChecker.displayCheckResults(results);
+  },
+
+  // Chrome 136修复测试
+  async testChrome136Fix() {
+    const chrome136Check = Chrome136NotificationFixer.checkChrome136Environment();
+
+    if (chrome136Check.isChrome136) {
+      console.log('开始Chrome 136通知修复...');
+      const fixResult = await Chrome136NotificationFixer.fixChrome136Notification();
+
+      if (fixResult) {
+        toastr.success('Chrome 136通知修复测试完成！');
+      } else {
+        toastr.error('Chrome 136通知修复失败，请查看控制台了解详情');
+      }
+    } else {
+      toastr.info('当前不是Chrome 136，无需特殊修复');
     }
   },
 };

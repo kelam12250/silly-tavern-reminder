@@ -13,24 +13,6 @@ const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const defaultSettings = {
   enableReminder: true, // 添加提醒功能的默认值
   enableNotification: true, // 添加通知功能的默认值
-  enableErrorSound: true, // 添加错误提示音功能的默认值
-};
-
-// 音频管理器
-const AudioManager = {
-  errorSound: null,
-
-  init() {
-    this.errorSound = new Audio('/sounds/message.mp3');
-    this.errorSound.volume = 0.5;
-  },
-
-  playError() {
-    if (extension_settings[extensionName].enableErrorSound && this.errorSound) {
-      this.errorSound.currentTime = 0;
-      this.errorSound.play().catch(err => console.error('播放错误提示音失败:', err));
-    }
-  },
 };
 
 // 通知管理器
@@ -333,7 +315,6 @@ const NotificationManager = {
   sendError(error) {
     const errorMessage = error?.message || '未知错误';
     this.send('SillyTavern 发生错误', `错误信息: ${errorMessage}`);
-    AudioManager.playError();
   },
 
   // 检查是否需要使用ServiceWorker通知
@@ -517,7 +498,6 @@ const SettingsManager = {
   updateUI() {
     $('#title_reminder_setting').prop('checked', extension_settings[extensionName].enableReminder);
     $('#notification_setting').prop('checked', extension_settings[extensionName].enableNotification);
-    $('#error_sound_setting').prop('checked', extension_settings[extensionName].enableErrorSound);
   },
 
   // 保存设置
@@ -982,9 +962,6 @@ const Chrome136NotificationFixer = {
       console.log('2. 可能存在移动端通知的兼容性问题');
       console.log('3. 建议尝试重启浏览器或清除缓存');
       console.log('4. 如果问题持续，可能需要等待Chrome更新修复');
-
-      // 显示给用户
-      toastr.info('检测到Chrome 136移动端\n这是一个新版本，可能存在通知兼容性问题\n建议尝试重启浏览器或清除缓存');
     }
 
     return {
@@ -998,9 +975,8 @@ const Chrome136NotificationFixer = {
 const InitManager = {
   async init() {
     try {
-      // 初始化错误处理器和音频管理器
+      // 初始化错误处理器
       ErrorHandler.init();
-      AudioManager.init();
 
       // 加载HTML和CSS
       const settingsHtml = await $.get(`${extensionFolderPath}/reminder.html`);
@@ -1070,10 +1046,6 @@ const InitManager = {
     // 原有的事件监听
     $('#title_reminder_setting').on('input', EventHandler.onReminderToggle);
     $('#notification_setting').on('input', EventHandler.onNotificationToggle);
-    $('#error_sound_setting').on('input', event => {
-      const value = Boolean($(event.target).prop('checked'));
-      SettingsManager.save('enableErrorSound', value);
-    });
     $('#request_notification_permission').on('click', EventHandler.onRequestPermissionClick);
 
     // 新增的调试功能事件监听

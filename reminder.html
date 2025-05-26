@@ -1,37 +1,89 @@
 <div class="reminder-extension-settings">
-    <div class="inline-drawer">
-        <div class="inline-drawer-toggle inline-drawer-header">
-            <b>酒馆消息提醒</b>
-            <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-        </div>
-        <div class="inline-drawer-content">
-            <div>
-                <strong>消息提醒开关</strong>
-            </div>
-            <div class="reminder-extension_block flex-container">
-                <input id="title_reminder_setting" type="checkbox" />
-                <label for="title_reminder_setting">启用新消息标题提醒</label>
-                <i title="当切换到其他标签页时，收到新消息会通过闪烁标题提醒" class="fa-solid fa-info-circle"></i>
-            </div>
-            <div class="reminder-extension_block flex-container">
-                <input id="notification_setting" type="checkbox" />
-                <label for="notification_setting">启用新消息系统提醒</label>
-                <i title="当切换到其他标签页时，收到新消息会通过系统通知提醒" class="fa-solid fa-info-circle"></i>
-            </div>
-            <div class="reminder-extension_block flex-container">
-                <input id="error_sound_setting" type="checkbox" />
-                <label for="error_sound_setting">启用错误提示音</label>
-                <i title="当系统发生错误时播放提示音" class="fa-solid fa-info-circle"></i>
-            </div>
-            <div>
-                <strong>权限申请</strong>
-            </div>
-            <div class="reminder-extension_block flex-container">
-                <input id="request_notification_permission" class="menu_button" type="button" value="申请通知权限" />
-                <i title="如果系统通知无法正常工作，请点击此按钮重新申请权限" class="fa-solid fa-info-circle"></i>
-            </div>
-
-            <hr class="sysHR" />
-        </div>
+  <div class="inline-drawer">
+    <div class="inline-drawer-toggle inline-drawer-header">
+      <b>酒馆消息提醒</b>
+      <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
     </div>
+    <div class="inline-drawer-content">
+      <div>
+        <strong>消息提醒开关</strong>
+      </div>
+      <div class="reminder-extension_block flex-container">
+        <input id="title_reminder_setting" type="checkbox" />
+        <label for="title_reminder_setting">启用新消息标题提醒</label>
+        <i title="当切换到其他标签页时，收到新消息会通过闪烁标题提醒" class="fa-solid fa-info-circle"></i>
+      </div>
+      <div class="reminder-extension_block flex-container">
+        <input id="notification_setting" type="checkbox" />
+        <label for="notification_setting">启用新消息系统提醒</label>
+        <i title="当切换到其他标签页时，收到新消息会通过系统通知提醒" class="fa-solid fa-info-circle"></i>
+      </div>
+      <div class="reminder-extension_block flex-container">
+        <input id="error_sound_setting" type="checkbox" />
+        <label for="error_sound_setting">启用错误提示音</label>
+        <i title="当系统发生错误时播放提示音" class="fa-solid fa-info-circle"></i>
+      </div>
+
+      <!-- 移动端兼容性提示 -->
+      <div
+        id="mobile_compatibility_warning"
+        class="reminder-extension_block"
+        style="
+          display: none;
+          background-color: #fff3cd;
+          border: 1px solid #ffeaa7;
+          border-radius: 4px;
+          padding: 10px;
+          margin: 10px 0;
+        "
+      >
+        <div style="color: #856404; font-size: 14px">
+          <i class="fa-solid fa-exclamation-triangle" style="margin-right: 5px"></i>
+          <strong>移动端提示：</strong>
+          <ul style="margin: 5px 0 0 20px; padding: 0">
+            <li>需要HTTPS环境才能使用通知功能</li>
+            <li>iOS设备需要iOS 16.4+版本</li>
+            <li>部分移动浏览器可能不支持Web通知</li>
+            <li>建议使用Chrome、Firefox等现代浏览器</li>
+          </ul>
+        </div>
+      </div>
+
+      <div>
+        <strong>权限申请</strong>
+      </div>
+      <div class="reminder-extension_block flex-container">
+        <input id="request_notification_permission" class="menu_button" type="button" value="申请通知权限" />
+        <i title="如果系统通知无法正常工作，请点击此按钮重新申请权限" class="fa-solid fa-info-circle"></i>
+      </div>
+
+      <!-- 调试信息区域 -->
+      <div id="debug_info_section" style="display: none">
+        <div>
+          <strong>调试信息</strong>
+        </div>
+        <div class="reminder-extension_block">
+          <button id="show_debug_info" class="menu_button" type="button">显示环境信息</button>
+          <button id="test_notification" class="menu_button" type="button">测试通知</button>
+        </div>
+        <div
+          id="debug_output"
+          style="
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+          "
+        ></div>
+      </div>
+
+      <hr class="sysHR" />
+    </div>
+  </div>
 </div>

@@ -167,6 +167,18 @@ const NotificationManager = {
         return null;
       }
 
+      // Chrome 136移动端特殊处理：使用ServiceWorker通知
+      if (this.needsServiceWorkerNotification()) {
+        console.log('检测到Chrome 136移动端，使用ServiceWorker通知...');
+        try {
+          await this.sendViaServiceWorker(title, body, options);
+          return { type: 'serviceWorker', success: true };
+        } catch (swError) {
+          console.error('ServiceWorker通知失败，尝试降级到普通通知:', swError);
+          // 如果ServiceWorker失败，继续尝试普通通知
+        }
+      }
+
       // 移动端优化的通知选项
       const notificationOptions = {
         body: body,
@@ -208,6 +220,18 @@ const NotificationManager = {
         console.log('通知对象创建成功:', notification);
       } catch (createError) {
         console.error('创建通知对象失败:', createError);
+
+        // 如果是Chrome 136的构造函数错误，提示使用ServiceWorker
+        if (createError.message.includes('Use ServiceWorkerRegistration.showNotification()')) {
+          console.log('检测到需要使用ServiceWorker通知，重新尝试...');
+          try {
+            await this.sendViaServiceWorker(title, body, options);
+            return { type: 'serviceWorker', success: true };
+          } catch (swError) {
+            console.error('ServiceWorker通知也失败:', swError);
+            throw new Error('Chrome 136移动端通知功能受限，ServiceWorker通知也失败');
+          }
+        }
 
         // 尝试使用最简配置重新创建
         if (envInfo.isMobile) {
@@ -291,6 +315,8 @@ const NotificationManager = {
           console.error('建议: 权限问题，检查浏览器和系统通知设置');
         } else if (error.name === 'AbortError') {
           console.error('建议: 通知被中止，可能是系统限制');
+        } else if (error.message.includes('ServiceWorkerRegistration.showNotification()')) {
+          console.error('建议: Chrome 136移动端需要使用ServiceWorker通知');
         }
 
         // 提供用户友好的错误提示
@@ -308,6 +334,127 @@ const NotificationManager = {
     const errorMessage = error?.message || '未知错误';
     this.send('SillyTavern 发生错误', `错误信息: ${errorMessage}`);
     AudioManager.playError();
+  },
+
+  // 检查是否需要使用ServiceWorker通知
+  needsServiceWorkerNotification() {
+    const envInfo = this.getEnvironmentInfo();
+
+    // Chrome 136移动端需要使用ServiceWorker通知
+    if (envInfo.isMobile && envInfo.userAgent.includes('Chrome/136')) {
+      return true;
+    }
+
+    // 其他可能需要ServiceWorker的情况
+    return false;
+  },
+
+  // 使用ServiceWorker发送通知
+  async sendViaServiceWorker(title, body, options = {}) {
+    try {
+      console.log('使用ServiceWorker发送通知...');
+
+      if (!('serviceWorker' in navigator)) {
+        throw new Error('ServiceWorker不支持');
+      }
+
+      // 注册ServiceWorker（如果还没有）
+      let registration = await navigator.serviceWorker.getRegistration();
+
+      if (!registration) {
+        console.log('注册专门的通知ServiceWorker...');
+
+        // 使用专门的ServiceWorker文件
+        const swPath = `/scripts/extensions/third-party/${extensionName}/notification-sw.js`;
+
+        try {
+          registration = await navigator.serviceWorker.register(swPath);
+          console.log('专门的ServiceWorker注册成功:', registration);
+        } catch (registerError) {
+          console.log('专门的ServiceWorker注册失败，使用内联版本:', registerError);
+
+          // 如果专门文件失败，使用内联ServiceWorker
+          const swCode = `
+            console.log('内联ServiceWorker已加载');
+            
+            self.addEventListener('notificationclick', function(event) {
+              console.log('通知被点击');
+              event.notification.close();
+              event.waitUntil(
+                clients.matchAll({ type: 'window' }).then(function(clientList) {
+                  for (let i = 0; i < clientList.length; i++) {
+                    const client = clientList[i];
+                    if ('focus' in client) {
+                      return client.focus();
+                    }
+                  }
+                  if (clients.openWindow) {
+                    return clients.openWindow('/');
+                  }
+                })
+              );
+            });
+            
+            self.addEventListener('install', function(event) {
+              console.log('内联ServiceWorker安装');
+              self.skipWaiting();
+            });
+            
+            self.addEventListener('activate', function(event) {
+              console.log('内联ServiceWorker激活');
+              event.waitUntil(self.clients.claim());
+            });
+          `;
+
+          const blob = new Blob([swCode], { type: 'application/javascript' });
+          const swUrl = URL.createObjectURL(blob);
+
+          registration = await navigator.serviceWorker.register(swUrl);
+          console.log('内联ServiceWorker注册成功:', registration);
+        }
+      }
+
+      // 等待ServiceWorker激活
+      if (registration.installing) {
+        console.log('等待ServiceWorker安装...');
+        await new Promise(resolve => {
+          registration.installing.addEventListener('statechange', function () {
+            if (this.state === 'activated') {
+              console.log('ServiceWorker已激活');
+              resolve();
+            }
+          });
+        });
+      } else if (registration.waiting) {
+        console.log('ServiceWorker等待激活...');
+        registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+        await new Promise(resolve => {
+          navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true });
+        });
+      }
+
+      // 使用ServiceWorker发送通知
+      const notificationOptions = {
+        body: body,
+        icon: '/favicon.ico',
+        tag: `sw-notification-${Date.now()}`,
+        requireInteraction: false,
+        silent: false,
+        renotify: true,
+        timestamp: Date.now(),
+        ...options,
+      };
+
+      console.log('通过ServiceWorker显示通知:', { title, notificationOptions });
+
+      await registration.showNotification(title, notificationOptions);
+      console.log('ServiceWorker通知发送成功');
+
+      return true;
+    } catch (error) {
+      console.error('ServiceWorker通知发送失败:', error);
+      throw error;
+    }
   },
 };
 
@@ -709,18 +856,25 @@ const Chrome136NotificationFixer = {
       return false;
     }
 
-    console.log('检测到Chrome 136，应用特殊修复...');
+    console.log('检测到Chrome 136，应用ServiceWorker通知修复...');
 
     try {
-      // Chrome 136 可能需要特殊的通知配置
+      // Chrome 136 移动端优先使用ServiceWorker通知
+      if (NotificationManager.isMobile()) {
+        console.log('Chrome 136移动端，使用ServiceWorker通知...');
+        await NotificationManager.sendViaServiceWorker(
+          'Chrome 136 修复成功',
+          '已成功使用ServiceWorker发送通知，这应该解决了Chrome 136移动端的通知问题',
+        );
+        return true;
+      }
+
+      // 桌面端仍然尝试普通通知
       const notification = new Notification('Chrome 136 修复测试', {
         body: '正在测试Chrome 136的通知修复',
-        // Chrome 136 移动端可能需要这些特殊配置
         requireInteraction: false,
         silent: false,
         renotify: false,
-        // 移除可能导致问题的选项
-        // 不使用 icon, badge, image 等可能导致问题的选项
       });
 
       // Chrome 136 特殊事件处理
@@ -751,6 +905,22 @@ const Chrome136NotificationFixer = {
       return true;
     } catch (error) {
       console.error('Chrome 136 修复失败:', error);
+
+      // 如果是ServiceWorker错误，尝试最小化通知
+      if (error.message.includes('Use ServiceWorkerRegistration.showNotification()')) {
+        console.log('检测到需要ServiceWorker，重新尝试...');
+        try {
+          await NotificationManager.sendViaServiceWorker(
+            'Chrome 136 ServiceWorker修复',
+            '使用ServiceWorker成功解决Chrome 136移动端通知问题',
+          );
+          return true;
+        } catch (swError) {
+          console.error('ServiceWorker修复也失败:', swError);
+          return false;
+        }
+      }
+
       return this.tryMinimalNotification();
     }
   },
@@ -912,6 +1082,7 @@ const InitManager = {
     $('#test_simple_notification').on('click', this.testSimpleNotification);
     $('#check_mobile_environment').on('click', this.checkMobileEnvironment);
     $('#test_chrome136_fix').on('click', this.testChrome136Fix);
+    $('#test_serviceworker_notification').on('click', this.testServiceWorkerNotification);
   },
 
   showDebugInfo() {
@@ -1184,6 +1355,46 @@ const InitManager = {
       }
     } else {
       toastr.info('当前不是Chrome 136，无需特殊修复');
+    }
+  },
+
+  // ServiceWorker通知测试
+  async testServiceWorkerNotification() {
+    const envInfo = NotificationManager.getEnvironmentInfo();
+    console.log('测试ServiceWorker通知:', envInfo);
+
+    if (!NotificationManager.checkSupport()) {
+      toastr.error('此浏览器不支持通知功能');
+      return;
+    }
+
+    const permission = NotificationManager.checkPermission();
+    if (permission !== 'granted') {
+      toastr.warning('请先申请通知权限');
+      return;
+    }
+
+    try {
+      console.log('强制使用ServiceWorker通知...');
+
+      // 直接调用ServiceWorker通知方法
+      await NotificationManager.sendViaServiceWorker(
+        '🔧 ServiceWorker测试',
+        'Chrome 136移动端专用ServiceWorker通知测试',
+      );
+
+      console.log('ServiceWorker通知发送成功');
+      toastr.success('ServiceWorker通知已发送！这应该能解决Chrome 136移动端的问题');
+    } catch (error) {
+      console.error('ServiceWorker通知测试失败:', error);
+      toastr.error('ServiceWorker通知失败: ' + error.message);
+
+      // 提供详细的故障排除建议
+      if (error.message.includes('ServiceWorker不支持')) {
+        toastr.warning('您的浏览器不支持ServiceWorker，这可能是问题的根源');
+      } else {
+        toastr.info('ServiceWorker通知失败，建议：\n1. 重启浏览器\n2. 清除缓存\n3. 检查HTTPS环境');
+      }
     }
   },
 };

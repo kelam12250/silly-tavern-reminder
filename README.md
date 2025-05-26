@@ -83,6 +83,17 @@ A SillyTavern extension that provides message reminder functionality.
 
 要启用调试模式，在URL后添加 `?debug=true` 参数。
 
+### 🔧 **Chrome 136 移动端特殊问题**
+
+**问题描述**: Chrome 136移动端出现 `"Illegal constructor. Use ServiceWorkerRegistration.showNotification() instead"` 错误
+
+**解决方案**:
+1. **自动检测**: 扩展会自动检测Chrome 136移动端并使用ServiceWorker通知
+2. **手动测试**: 点击"SW通知测试"按钮强制使用ServiceWorker通知
+3. **Chrome 136修复**: 点击"Chrome 136修复"按钮应用专门的修复方案
+
+**技术原理**: Chrome 136移动端要求使用`ServiceWorkerRegistration.showNotification()`而不是`new Notification()`
+
 ## 安装方法 | Installation
 
 1. 打开 SillyTavern 扩展管理页面

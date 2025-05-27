@@ -18,6 +18,14 @@
         <label for="notification_setting">启用新消息系统提醒</label>
         <i title="当切换到其他标签页时，收到新消息会通过系统通知提醒" class="fa-solid fa-info-circle"></i>
       </div>
+      <div class="reminder-extension_block flex-container">
+        <input id="serviceworker_notification_setting" type="checkbox" />
+        <label for="serviceworker_notification_setting">启用ServiceWorker通知</label>
+        <i
+          title="如果默认通知方法在移动端不生效，可开启此选项使用ServiceWorker方式发送通知"
+          class="fa-solid fa-info-circle"
+        ></i>
+      </div>
 
       <!-- 移动端兼容性提示 -->
       <div
@@ -40,6 +48,7 @@
             <li>iOS设备需要iOS 16.4+版本</li>
             <li>部分移动浏览器可能不支持Web通知</li>
             <li>建议使用Chrome、Firefox等现代浏览器</li>
+            <li><strong>如果默认通知不生效，可尝试启用"ServiceWorker通知"选项</strong></li>
           </ul>
         </div>
       </div>

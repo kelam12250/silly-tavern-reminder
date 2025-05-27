@@ -13,6 +13,7 @@ const extensionFolderPath = `scripts/extensions/third-party/${extensionName}`;
 const defaultSettings = {
   enableReminder: true, // 添加提醒功能的默认值
   enableNotification: true, // 添加通知功能的默认值
+  enableServiceWorkerNotification: false, // ServiceWorker通知的默认值（默认关闭）
 };
 
 // 通知管理器
@@ -149,15 +150,26 @@ const NotificationManager = {
         return null;
       }
 
-      // Chrome 136移动端特殊处理：使用ServiceWorker通知
-      if (this.needsServiceWorkerNotification()) {
-        console.log('检测到Chrome 136移动端，使用ServiceWorker通知...');
+      // 检查是否需要使用ServiceWorker通知（用户设置或Chrome 136移动端）
+      const shouldUseServiceWorker =
+        extension_settings[extensionName].enableServiceWorkerNotification || this.needsServiceWorkerNotification();
+
+      if (shouldUseServiceWorker) {
+        console.log('使用ServiceWorker通知（用户设置或Chrome 136移动端）...');
         try {
           await this.sendViaServiceWorker(title, body, options);
           return { type: 'serviceWorker', success: true };
         } catch (swError) {
+          console.error('ServiceWorker通知失败:', swError);
+
+          // 如果用户明确启用了ServiceWorker模式，失败时不降级
+          if (extension_settings[extensionName].enableServiceWorkerNotification) {
+            console.log('用户启用了ServiceWorker模式，不降级到普通通知');
+            throw new Error('ServiceWorker通知失败: ' + swError.message);
+          }
+
+          // 否则尝试降级到普通通知
           console.error('ServiceWorker通知失败，尝试降级到普通通知:', swError);
-          // 如果ServiceWorker失败，继续尝试普通通知
         }
       }
 
@@ -498,6 +510,10 @@ const SettingsManager = {
   updateUI() {
     $('#title_reminder_setting').prop('checked', extension_settings[extensionName].enableReminder);
     $('#notification_setting').prop('checked', extension_settings[extensionName].enableNotification);
+    $('#serviceworker_notification_setting').prop(
+      'checked',
+      extension_settings[extensionName].enableServiceWorkerNotification,
+    );
   },
 
   // 保存设置
@@ -550,6 +566,42 @@ const EventHandler = {
     }
 
     SettingsManager.save('enableNotification', value);
+  },
+
+  // 处理ServiceWorker通知开关
+  async onServiceWorkerNotificationToggle(event) {
+    const value = Boolean($(event.target).prop('checked'));
+    const envInfo = NotificationManager.getEnvironmentInfo();
+
+    console.log('ServiceWorker通知开关切换:', { value, envInfo });
+
+    // 如果启用ServiceWorker通知，先检查环境
+    if (value) {
+      if (!('serviceWorker' in navigator)) {
+        toastr.error('当前浏览器不支持ServiceWorker功能');
+        $(event.target).prop('checked', false);
+        return;
+      }
+
+      // 检查通知权限
+      const permission = NotificationManager.checkPermission();
+      if (permission !== 'granted') {
+        toastr.warning('请先申请通知权限才能使用ServiceWorker通知');
+        $(event.target).prop('checked', false);
+        return;
+      }
+
+      // 移动端提示
+      if (envInfo.isMobile) {
+        toastr.info('已启用ServiceWorker通知模式，适用于解决移动端通知兼容性问题');
+      } else {
+        toastr.info('已启用ServiceWorker通知模式，通常移动端默认通知失效时使用');
+      }
+    } else {
+      toastr.info('已关闭ServiceWorker通知，将使用默认通知方式');
+    }
+
+    SettingsManager.save('enableServiceWorkerNotification', value);
   },
 
   // 处理权限申请
@@ -1046,6 +1098,7 @@ const InitManager = {
     // 原有的事件监听
     $('#title_reminder_setting').on('input', EventHandler.onReminderToggle);
     $('#notification_setting').on('input', EventHandler.onNotificationToggle);
+    $('#serviceworker_notification_setting').on('input', EventHandler.onServiceWorkerNotificationToggle);
     $('#request_notification_permission').on('click', EventHandler.onRequestPermissionClick);
 
     // 新增的调试功能事件监听
@@ -1064,6 +1117,11 @@ const InitManager = {
     const debugInfo = {
       环境信息: envInfo,
       扩展设置: extension_settings[extensionName],
+      ServiceWorker设置: {
+        启用状态: extension_settings[extensionName].enableServiceWorkerNotification,
+        自动检测需要SW: NotificationManager.needsServiceWorkerNotification(),
+        浏览器SW支持: 'serviceWorker' in navigator,
+      },
       浏览器信息: {
         userAgent: navigator.userAgent,
         language: navigator.language,

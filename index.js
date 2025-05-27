@@ -14,6 +14,7 @@ const defaultSettings = {
   enableReminder: true, // 添加提醒功能的默认值
   enableNotification: true, // 添加通知功能的默认值
   enableServiceWorkerNotification: false, // ServiceWorker通知的默认值（默认关闭）
+  enableDebugMode: false, // 调试模式的默认值（默认关闭）
 };
 
 // 通知管理器
@@ -323,6 +324,26 @@ const NotificationManager = {
     }
   },
 
+  // 智能推荐ServiceWorker模式
+  checkAndRecommendServiceWorker() {
+    if (this.shouldRecommendServiceWorker()) {
+      const envInfo = this.getEnvironmentInfo();
+      console.log('检测到可能需要ServiceWorker通知的环境');
+
+      // 延迟显示推荐，避免干扰用户
+      setTimeout(() => {
+        if (window.toastr) {
+          toastr.info(
+            '检测到您使用的浏览器可能存在通知兼容性问题\n' +
+              '建议在设置中启用"ServiceWorker通知"选项以获得更好的通知体验',
+            '通知优化建议',
+            { timeOut: 8000 },
+          );
+        }
+      }, 3000);
+    }
+  },
+
   // 发送错误通知
   sendError(error) {
     const errorMessage = error?.message || '未知错误';
@@ -333,12 +354,31 @@ const NotificationManager = {
   needsServiceWorkerNotification() {
     const envInfo = this.getEnvironmentInfo();
 
-    // Chrome 136移动端需要使用ServiceWorker通知
+    // Chrome 136移动端的特殊兼容性问题
     if (envInfo.isMobile && envInfo.userAgent.includes('Chrome/136')) {
       return true;
     }
 
-    // 其他可能需要ServiceWorker的情况
+    // 其他已知的移动端问题情况
+    // 可以根据实际使用反馈添加更多条件
+    return false;
+  },
+
+  // 检查是否应该推荐使用ServiceWorker模式
+  shouldRecommendServiceWorker() {
+    const envInfo = this.getEnvironmentInfo();
+
+    // 如果用户已经启用，不再推荐
+    if (extension_settings[extensionName].enableServiceWorkerNotification) {
+      return false;
+    }
+
+    // 移动端Chrome 136已知问题
+    if (envInfo.isMobile && envInfo.userAgent.includes('Chrome/136')) {
+      return true;
+    }
+
+    // 其他可能的推荐情况
     return false;
   },
 
@@ -514,6 +554,20 @@ const SettingsManager = {
       'checked',
       extension_settings[extensionName].enableServiceWorkerNotification,
     );
+    $('#debug_mode_setting').prop('checked', extension_settings[extensionName].enableDebugMode);
+
+    // 根据调试模式设置显示调试区域
+    this.updateDebugSection();
+  },
+
+  // 更新调试区域显示
+  updateDebugSection() {
+    if (extension_settings[extensionName].enableDebugMode) {
+      $('#debug_info_section').show();
+    } else {
+      $('#debug_info_section').hide();
+      $('#debug_output').hide(); // 隐藏调试输出
+    }
   },
 
   // 保存设置
@@ -602,6 +656,22 @@ const EventHandler = {
     }
 
     SettingsManager.save('enableServiceWorkerNotification', value);
+  },
+
+  // 处理调试模式开关
+  async onDebugModeToggle(event) {
+    const value = Boolean($(event.target).prop('checked'));
+
+    console.log('调试模式开关切换:', value);
+
+    if (value) {
+      toastr.info('已启用调试模式，显示调试工具和环境信息');
+    } else {
+      toastr.info('已关闭调试模式，隐藏调试工具');
+    }
+
+    SettingsManager.save('enableDebugMode', value);
+    SettingsManager.updateDebugSection();
   },
 
   // 处理权限申请
@@ -1059,6 +1129,9 @@ const InitManager = {
       // 显示环境信息
       const envInfo = NotificationManager.getEnvironmentInfo();
       console.log('扩展初始化完成，环境信息:', envInfo);
+
+      // 检查并推荐ServiceWorker模式（如果需要）
+      NotificationManager.checkAndRecommendServiceWorker();
     } catch (error) {
       console.error('初始化扩展时出错:', error);
     }
@@ -1088,10 +1161,7 @@ const InitManager = {
       }
     }
 
-    // 开发模式下显示调试信息
-    if (envInfo.isLocalhost || window.location.search.includes('debug=true')) {
-      $('#debug_info_section').show();
-    }
+    // 注意：调试信息现在通过用户设置控制，而不是自动显示
   },
 
   bindEventListeners() {
@@ -1099,6 +1169,7 @@ const InitManager = {
     $('#title_reminder_setting').on('input', EventHandler.onReminderToggle);
     $('#notification_setting').on('input', EventHandler.onNotificationToggle);
     $('#serviceworker_notification_setting').on('input', EventHandler.onServiceWorkerNotificationToggle);
+    $('#debug_mode_setting').on('input', EventHandler.onDebugModeToggle);
     $('#request_notification_permission').on('click', EventHandler.onRequestPermissionClick);
 
     // 新增的调试功能事件监听
@@ -1121,6 +1192,10 @@ const InitManager = {
         启用状态: extension_settings[extensionName].enableServiceWorkerNotification,
         自动检测需要SW: NotificationManager.needsServiceWorkerNotification(),
         浏览器SW支持: 'serviceWorker' in navigator,
+      },
+      调试模式设置: {
+        启用状态: extension_settings[extensionName].enableDebugMode,
+        调试区域显示: $('#debug_info_section').is(':visible'),
       },
       浏览器信息: {
         userAgent: navigator.userAgent,

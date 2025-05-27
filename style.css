@@ -1,9 +1,91 @@
 .reminder-extension_block i.fa-info-circle {
-    display: flex;
-    align-items: center;
-    margin-left: 5px;
+  display: flex;
+  align-items: center;
+  margin-left: 5px;
 }
 
 #request_notification_permission {
-    margin-left: 10px;
+  margin-left: 10px;
+}
+
+/* 调试按钮布局 */
+.debug-buttons-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.debug-button {
+  flex: 1;
+  min-width: 120px;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #f8f9fa;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.debug-button:hover {
+  background-color: #e9ecef;
+  border-color: #adb5bd;
+}
+
+.debug-button-success {
+  background-color: #28a745 !important;
+  color: white !important;
+  border-color: #28a745 !important;
+}
+
+.debug-button-success:hover {
+  background-color: #218838 !important;
+  border-color: #1e7e34 !important;
+}
+
+.debug-button-info {
+  background-color: #17a2b8 !important;
+  color: white !important;
+  border-color: #17a2b8 !important;
+}
+
+.debug-button-info:hover {
+  background-color: #138496 !important;
+  border-color: #117a8b !important;
+}
+
+.debug-button-danger {
+  background-color: #dc3545 !important;
+  color: white !important;
+  border-color: #dc3545 !important;
+}
+
+.debug-button-danger:hover {
+  background-color: #c82333 !important;
+  border-color: #bd2130 !important;
+}
+
+.debug-button-purple {
+  background-color: #6f42c1 !important;
+  color: white !important;
+  border-color: #6f42c1 !important;
+}
+
+.debug-button-purple:hover {
+  background-color: #5a32a3 !important;
+  border-color: #512b91 !important;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .debug-buttons-row {
+    flex-direction: column;
+  }
+
+  .debug-button {
+    min-width: auto;
+    width: 100%;
+  }
 }

@@ -134,7 +134,7 @@ const NotificationManager = {
   },
 
   // 发送通知
-  async send(title = '내 곰돌바오💙', body = '읽지 않은 새 메시지 1개', options = {}) {
+  async send(title = '내 곰돌바오', body = '읽지 않은 새 메시지 1개', options = {}) {
     try {
       const permission = this.checkPermission();
       const envInfo = this.getEnvironmentInfo();

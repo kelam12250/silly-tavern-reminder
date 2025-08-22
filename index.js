@@ -134,7 +134,7 @@ const NotificationManager = {
   },
 
   // 发送通知
-  async send(title = 'SillyTavern 新消息', body = '您有新的消息', options = {}) {
+  async send(title = 'P.G', body = '읽지 않은 새 메시지 1개', options = {}) {
     try {
       const permission = this.checkPermission();
       const envInfo = this.getEnvironmentInfo();

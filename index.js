@@ -139,7 +139,7 @@ const NotificationManager = {
       const permission = this.checkPermission();
       const envInfo = this.getEnvironmentInfo();
 
-      console.log('尝试发送通知:', { title, body, permission, Kakaotalk});
+      console.log('尝试发送通知:', { title, body, permission, envInfo});
 
       if (permission !== 'granted') {
         console.log('没有通知权限，权限状态:', permission);

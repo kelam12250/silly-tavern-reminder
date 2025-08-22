@@ -43,7 +43,7 @@ const NotificationManager = {
     const info = {
       isMobile: this.isMobile(),
       isHTTPS: location.protocol === 'https:',
-      isLocalhost: location.hostname === 'localhost' || location.hostname === '127.0.0.1',
+      isLocalhost: location.hostname === 'localhost' || location.hostname === '카카오톡',
       userAgent: navigator.userAgent,
       notificationSupport: 'Notification' in window,
       permission: this.checkPermission(),
